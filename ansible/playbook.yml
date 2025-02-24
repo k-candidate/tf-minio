@@ -1,0 +1,116 @@
+---
+- name: Deploy MinIO
+  hosts: all
+  become: true
+  vars:
+    minio_data_dir: /mnt/data/minio
+    minio_config_dir: /etc/minio
+    minio_root_user: "{{ minio_root_user }}"
+    minio_root_password: "{{ minio_root_password }}"
+    minio_readonly_user: "{{ minio_readonly_user }}"
+    minio_readonly_password: "{{ minio_readonly_password }}"
+    minio_readwrite_user: "{{ minio_readwrite_user }}"
+    minio_readwrite_password: "{{ minio_readwrite_password }}"
+
+  tasks:
+    - name: Show Ansible version. For troubleshooting
+      debug:
+        msg: "Ansible version is  {{ ansible_version.full }}"
+
+    - name: Check if this playbook has rebooted the machine before
+      ansible.builtin.stat:
+        path: /var/tmp/ansible_rebooted_this_machine_before.txt
+      register: reboot_file
+
+    - name: Reboot on the playbook's first run to start fresh after the changes made by user data
+      ansible.builtin.reboot:
+        post_reboot_delay: 10
+        connect_timeout: 120
+      when: not reboot_file.stat.exists
+      register: reboot_result
+
+    - name: Create file to indicate reboot happened on the playbook's first run
+      ansible.builtin.file:
+        path: /var/tmp/ansible_rebooted_this_machine_before.txt
+        state: touch
+      when:
+        - reboot_file.stat.exists == false
+        - reboot_result is succeeded
+
+    - name: Ensure required directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ minio_data_dir }}"
+        - "{{ minio_config_dir }}"
+
+    - name: Copy MinIO configuration file
+      ansible.builtin.template:
+        src: minio.env.j2
+        dest: "{{ minio_config_dir }}/minio.env"
+        mode: '0600'
+
+    - name: Copy Docker Compose file
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ minio_config_dir }}/docker-compose.yml"
+        mode: '0644'
+
+    - name: Start MinIO
+      community.docker.docker_compose_v2:
+        project_src: "{{ minio_config_dir }}"
+        files:
+          - docker-compose.yml
+        state: present
+
+    - name: Check MinIO container logs
+      community.docker.docker_container_info:
+        name: minio
+      register: minio_container
+
+    - name: Display MinIO container facts
+    
+      ansible.builtin.debug:
+        var: minio_container.container
+
+    - name: Download MinIO Client (mc)
+      ansible.builtin.get_url:
+        url: "https://dl.min.io/client/mc/release/linux-amd64/mc"
+        dest: /usr/local/bin/mc
+        mode: '0755'
+
+    - name: Wait for MinIO to be ready
+      ansible.builtin.wait_for:
+        port: 9000
+        delay: 10
+        timeout: 300
+
+    - name: Configure mc alias
+      ansible.builtin.command: mc alias set myminio http://localhost:9000 {{ minio_root_user }} {{ minio_root_password }}
+      changed_when: false
+
+    - name: Create readonly user
+      ansible.builtin.command: mc admin user add myminio {{ minio_readonly_user }} {{ minio_readonly_password }}
+      register: readonly_user_result
+      changed_when: "'added successfully' in readonly_user_result.stdout"
+      failed_when: 
+        - readonly_user_result.rc != 0
+        - "'already exists' not in readonly_user_result.stderr"
+
+    - name: Assign readonly policy to readonly user
+      ansible.builtin.command: mc admin policy attach myminio readonly --user {{ minio_readonly_user }}
+      changed_when: false
+
+    - name: Create readwrite user
+      ansible.builtin.command: mc admin user add myminio {{ minio_readwrite_user }} {{ minio_readwrite_password }}
+      register: readwrite_user_result
+      changed_when: "'added successfully' in readwrite_user_result.stdout"
+      failed_when:
+        - readwrite_user_result.rc != 0
+        - "'already exists' not in readwrite_user_result.stderr"
+
+    - name: Assign readwrite policy to readwrite user
+      ansible.builtin.command: mc admin policy attach myminio readwrite --user {{ minio_readwrite_user }}
+      changed_when: false
