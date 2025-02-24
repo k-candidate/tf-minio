@@ -64,24 +64,24 @@ variable "minio_root_password" {
 
 variable "minio_readonly_user" {
   description = "Minio Read Only user"
-  type = string
-  default = "readonlyuser"
+  type        = string
+  default     = "readonlyuser"
 }
 
 variable "minio_readonly_password" {
   description = "Minio Read Only password"
-  type = string
-  default = "readonlypass"
+  type        = string
+  default     = "readonlypass"
 }
 
 variable "minio_readwrite_user" {
   description = "Minio Read Write user"
-  type = string
-  default = "readwriteuser"
+  type        = string
+  default     = "readwriteuser"
 }
 
 variable "minio_readwrite_password" {
   description = "Minio Read Write password"
-  type = string
-  default = "readwritepass"
+  type        = string
+  default     = "readwritepass"
 }

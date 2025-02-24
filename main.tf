@@ -18,11 +18,11 @@ module "tf-module-kvm-vm" {
   ssh_private_key = var.ssh_private_key
   use_ansible     = true
   extra_vars = {
-    minio_root_user     = var.minio_root_user
-    minio_root_password = var.minio_root_password
-    minio_readonly_user = var.minio_readonly_user
-    minio_readonly_password = var.minio_readonly_password
-    minio_readwrite_user = var.minio_readwrite_user
+    minio_root_user          = var.minio_root_user
+    minio_root_password      = var.minio_root_password
+    minio_readonly_user      = var.minio_readonly_user
+    minio_readonly_password  = var.minio_readonly_password
+    minio_readwrite_user     = var.minio_readwrite_user
     minio_readwrite_password = var.minio_readwrite_password
   }
 }
